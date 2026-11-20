@@ -2,6 +2,7 @@ const express = require('express');
 const mysql = require('mysql2/promise');
 const mqtt = require('mqtt');
 const cors = require('cors');
+const { nextTicketCode } = require('./ticket-code');
 
 const app = express();
 app.use(cors());
@@ -36,7 +37,7 @@ app.post('/api/senhas', async (req, res) => {
       'SELECT COALESCE(MAX(CAST(SUBSTRING(codigo, 3) AS UNSIGNED)), 0) AS ultimo FROM senhas WHERE tipo = ?',
       [tipo]
     );
-    const codigo = `${prefixo}-${String(rows[0].ultimo + 1).padStart(3, '0')}`;
+    const codigo = nextTicketCode(prefixo, rows[0].ultimo);
     const [result] = await pool.query(
       'INSERT INTO senhas (codigo, tipo, status) VALUES (?, ?, "AGUARDANDO")',
       [codigo, tipo]
