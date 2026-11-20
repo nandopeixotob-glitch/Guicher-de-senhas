@@ -1,0 +1,75 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mysql-guiche
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password_segura
+      MYSQL_DATABASE: atendimento_db
+      MYSQL_USER: atendimento_user
+      MYSQL_PASSWORD: atendimento_pass
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rede-atendimento
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: broker-guiche
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+    networks:
+      - rede-atendimento
+
+  backend:
+    build: ./backend
+    container_name: api-guiche
+    restart: unless-stopped
+    environment:
+      DB_HOST: mysql
+      DB_USER: atendimento_user
+      DB_PASSWORD: atendimento_pass
+      DB_NAME: atendimento_db
+      MQTT_URL: mqtt://mosquitto:1883
+      MQTT_USER: painel_user
+      MQTT_PASSWORD: senha_mqtt_123
+    depends_on:
+      mysql:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+    networks:
+      - rede-atendimento
+
+  frontend:
+    image: nginx:alpine
+    container_name: web-guiche
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./frontend/dist:/usr/share/nginx/html:ro
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - backend
+    networks:
+      - rede-atendimento
+
+volumes:
+  mysql_data:
+
+networks:
+  rede-atendimento:
+    driver: bridge
