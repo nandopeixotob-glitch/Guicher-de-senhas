@@ -25,13 +25,14 @@ export default function Tv() {
   const [somAtivo, setSomAtivo] = useState(false);
   const [erro, setErro] = useState('');
   const highlightTimer = useRef(null);
+  const audioContext = useRef(null);
 
   const carregar = useCallback(async () => {
     try {
-      const data = await apiRequest('/chamadas/historico');
+      const data = await apiRequest('/chamadas/historico', { cache: 'no-store' });
       setHistorico(data.ultimas || []);
       setAguardando(data.aguardando || []);
-      if (!chamada && data.ultimas?.length) {
+      if (data.ultimas?.length) {
         const atual = data.ultimas[0];
         setChamada({ senha: atual.senha, tipo: atual.tipo, guiche: atual.guiche });
       }
@@ -39,7 +40,7 @@ export default function Tv() {
     } catch (error) {
       setErro(error.message);
     }
-  }, [chamada]);
+  }, []);
 
   const anunciar = useCallback((payload) => {
     setChamada(payload);
@@ -50,15 +51,18 @@ export default function Tv() {
 
     if (somAtivo) {
       try {
-        const contexto = new (window.AudioContext || window.webkitAudioContext)();
-        const oscillator = contexto.createOscillator();
-        const gain = contexto.createGain();
-        oscillator.frequency.value = 880;
-        gain.gain.value = 0.12;
-        oscillator.connect(gain);
-        gain.connect(contexto.destination);
-        oscillator.start();
-        setTimeout(() => oscillator.stop(), 500);
+        const contexto = audioContext.current;
+        if (contexto) {
+          void contexto.resume();
+          const oscillator = contexto.createOscillator();
+          const gain = contexto.createGain();
+          oscillator.frequency.value = 880;
+          gain.gain.value = 0.12;
+          oscillator.connect(gain);
+          gain.connect(contexto.destination);
+          oscillator.start();
+          setTimeout(() => oscillator.stop(), 500);
+        }
         const texto = `Senha ${spokenCode(payload.senha)}, ${payload.guiche?.replace('Guichê', 'guichê')}`;
         const utterance = new SpeechSynthesisUtterance(texto);
         utterance.lang = 'pt-BR';
@@ -75,19 +79,27 @@ export default function Tv() {
 
   useEffect(() => {
     carregar();
-    const historicoTimer = setInterval(carregar, 15000);
+    const historicoTimer = setInterval(carregar, 5000);
     const clockTimer = setInterval(() => setAgora(new Date()), 1000);
     return () => {
       clearInterval(historicoTimer);
       clearInterval(clockTimer);
       clearTimeout(highlightTimer.current);
+      if (audioContext.current && audioContext.current.state !== 'closed') {
+        void audioContext.current.close();
+      }
     };
   }, [carregar]);
 
   const ativarSom = () => {
-    setSomAtivo(true);
-    const contexto = new (window.AudioContext || window.webkitAudioContext)();
-    contexto.resume();
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) throw new Error('Este navegador não oferece suporte a áudio');
+      audioContext.current ??= new AudioContextClass();
+      void audioContext.current.resume().then(() => setSomAtivo(true)).catch((error) => setErro(error.message));
+    } catch (error) {
+      setErro(error.message);
+    }
   };
 
   const preferencial = chamada?.tipo === 'PREFERENCIAL';

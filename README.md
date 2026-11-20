@@ -35,4 +35,6 @@ Rotas:
 - Guichê: `http://localhost/guiche`
 - Totem: `http://localhost/totem`
 
+O painel da TV recebe chamadas em tempo real e atualiza o histórico e a fila automaticamente. No Docker, o frontend compilado em `dist/` é servido pelo Nginx.
+
 Endereço público do MQTT: porta `9001` com usuário `painel_user` e senha `senha_mqtt_123`.
